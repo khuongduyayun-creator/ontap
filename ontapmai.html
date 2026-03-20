@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Ôn Thi Đoàn - Đảng | Duy Nguyễn</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --primary: #0056b3;
+            --secondary: #3b82f6;
+            --success: #22c55e;
+            --error: #ef4444;
+            --bg: #f1f5f9;
+        }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #cbd5e1 0%, #f1f5f9 100%);
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; margin: 0; padding: 15px;
+        }
+        .quiz-card {
+            background: white; width: 100%; max-width: 650px;
+            padding: 35px; border-radius: 20px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+        }
+        .progress-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: bold; color: var(--primary); }
+        .bar-bg { height: 8px; background: #e2e8f0; border-radius: 10px; margin-bottom: 25px; overflow: hidden; }
+        .bar-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.4s; }
+        .question-text { font-size: 1.25rem; font-weight: 700; margin-bottom: 25px; color: #1e293b; line-height: 1.5; }
+        .options-list { display: grid; gap: 12px; }
+        .option {
+            padding: 16px; border: 2px solid #f1f5f9; border-radius: 12px;
+            cursor: pointer; transition: 0.2s; font-weight: 500; background: #f8fafc;
+        }
+        .option:hover { border-color: var(--secondary); background: #eff6ff; }
+        .option.correct { background: #dcfce7 !important; border-color: var(--success) !important; color: #166534; }
+        .option.wrong { background: #fee2e2 !important; border-color: var(--error) !important; color: #991b1b; animation: shake 0.4s; }
+        @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(-8px);} 75% {transform: translateX(8px);} }
+        .btn-action {
+            margin-top: 30px; width: 100%; padding: 16px;
+            background: var(--primary); color: white; border: none;
+            border-radius: 12px; font-weight: 700; cursor: pointer; display: none;
+        }
+        .summary { text-align: center; }
+        .stat-box { display: flex; gap: 15px; margin: 20px 0; }
+        .stat { flex: 1; padding: 15px; background: #f8fafc; border-radius: 12px; }
+        .wrong-review { text-align: left; max-height: 300px; overflow-y: auto; margin-top: 20px; padding: 10px; border: 1px solid #eee; }
+        .wrong-item { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+<div class="quiz-card">
+    <div id="quiz-ui">
+        <div class="progress-header">
+            <span id="current-number">Câu 1/33</span>
+            <span id="percent-text">0%</span>
+        </div>
+        <div class="bar-bg"><div id="bar-fill" class="bar-fill"></div></div>
+        <div class="question-text" id="q-text">Đang tải dữ liệu...</div>
+        <div class="options-list" id="options-box"></div>
+        <button id="next-btn" class="btn-action" onclick="handleNext()">Tiếp tục →</button>
+    </div>
+
+    <div id="result-ui" style="display:none" class="summary">
+        <h1 style="color:var(--primary)">Kết quả ôn tập 🏆</h1>
+        <div class="stat-box">
+            <div class="stat"><b style="color:var(--success); font-size: 1.5rem;" id="res-correct">0</b><br>Đúng ngay</div>
+            <div class="stat"><b style="color:var(--error); font-size: 1.5rem;" id="res-wrong">0</b><br>Từng sai</div>
+        </div>
+        <div class="wrong-review" id="review-box"></div>
+        <button class="btn-action" style="display:block" onclick="location.reload()">Luyện tập lại (Đề mới)</button>
+    </div>
+</div>
+
+<script>
+    // Toàn bộ 33 câu hỏi từ file của Duy [cite: 1, 44, 59, 71]
+    const db = [
+        { q: "Đoàn TNCS Hồ Chí Minh thành lập ngày nào? Do ai sáng lập?", a: ["26/3/1931. Do Đảng Cộng sản VN và Chủ tịch Hồ Chí Minh", "26/3/1931. Do Chủ tịch Hồ Chí Minh", "26/3/1931. Do Trần Phú", "26/3/1931. Do Đảng Cộng sản VN"], c: 0, tip: "Nhớ: Đảng lãnh đạo, Bác sáng lập." },
+        { q: "Bài ca chính thức của Đoàn là gì? Tác giả ai?", a: ["Thanh niên làm theo lời Bác - Hoàng Hòa", "Thanh niên làm theo lời Bác - Hoàng Hà", "Kết niên lại – Hoàng Hòa", "Lên đàng – Hoàng Hà"], c: 0, tip: "Hoàng Hòa là tác giả bài Đoàn ca." },
+        { q: "Tác giả huy hiệu Đoàn là ai? Ra đời năm nào?", a: ["Huỳnh Văn Thuận, 1951", "Hoàng Hòa, 1931", "Phạm Tuyên, 1932", "Tôn Đức Lượng, 1951"], c: 0, tip: "Họa sĩ Huỳnh Văn Thuận vẽ tại Việt Bắc." },
+        { q: "Từ khi thành lập đến nay Đoàn đổi tên mấy lần?", a: ["7 lần", "3 lần", "5 lần", "9 lần"], c: 0, tip: "Con số 7 lịch sử." },
+        { q: "Bí thư thứ nhất đầu tiên của Trung ương Đoàn là ai?", a: ["Đ/c Nguyễn Lam", "Đ/c Vũ Quang", "Đ/c Đặng Quốc Bảo", "Đ/c Vũ Mão"], c: 0 },
+        { q: "Người Đoàn viên TNCS Hồ Chí Minh đầu tiên là ai?", a: ["Lý Tự Trọng", "Nông Văn Dền", "Kim Đồng", "Võ Thị Sáu"], c: 0 },
+        { q: "Hệ thống tổ chức Đoàn gồm mấy cấp?", a: ["Trung ương, tỉnh, huyện, cơ sở Đoàn", "Trung ương, tỉnh, huyện", "Trung ương, tỉnh, huyện, xã", "Tỉnh, huyện, cơ sở"], c: 0 },
+        { q: "Đoàn hoạt động theo nguyên tắc nào?", a: ["Tập trung dân chủ", "Hợp tác bình đẳng", "Hiệp thương dân chủ", "Tự nguyện tự quản"], c: 0 },
+        { q: "Đại hội Đoàn toàn quốc lần thứ I diễn ra ở đâu?", a: ["Thái Nguyên", "Thái Bình", "Hà Nội", "Hà Tây"], c: 0 },
+        { q: "Tên gọi của Đoàn khi mới thành lập (1931)?", a: ["Đoàn Thanh niên Cộng sản Đông Dương", "Đoàn TNCS Việt Nam", "Đoàn TN Phản đế", "Đoàn TN Dân chủ"], c: 0 },
+        { q: "Ngày 26/3 được chọn là ngày thành lập Đoàn tại Đại hội lần mấy?", a: ["Đại hội III (3/1961)", "Đại hội I", "Đại hội II", "Đại hội IV"], c: 0 },
+        { q: "Bác Hồ tặng thơ TNXP 'Không có việc gì khó...' khi nào?", a: ["20/3/1951 tại Nà Cù, Bắc Kạn", "15/7/1950", "8/5/1954", "15/7/1960"], c: 0 },
+        { q: "Câu nói: 'Các Vua Hùng đã có công dựng nước...' ra đời khi nào?", a: ["Tại Đền Giếng năm 1954 trước Đại đoàn Quân tiên phong", "Tại Việt Bắc", "Tại Đại hội Đoàn III", "Khi gặp TNXP"], c: 0 },
+        { q: "Báo Tiền phong là cơ quan của tổ chức nào?", a: ["Đoàn TNCS Hồ Chí Minh", "Đảng cộng sản", "Mặt trận tổ quốc", "Hội Phụ nữ"], c: 0 },
+        { q: "Cơ quan lãnh đạo cao nhất của Đoàn TNCS HCM?", a: ["Đại hội đại biểu Đoàn toàn quốc", "Ban Chấp hành", "Ban Thường vụ", "Đại hội các cấp"], c: 0 },
+        { q: "Cơ quan lãnh đạo cao nhất của chi đoàn là gì?", a: ["Đại hội đoàn viên", "Ban Chấp hành", "Bí thư chi đoàn", "Đoàn cấp trên"], c: 0 },
+        { q: "Tổ chức cơ sở Đoàn là gì?", a: ["Đoàn cơ sở và chi đoàn cơ sở", "Chi đoàn cơ sở", "Đoàn cơ sở", "Chi đoàn bộ phận"], c: 0 },
+        { q: "Điều kiện thành lập Chi đoàn là gì?", a: ["Có ít nhất 3 đoàn viên", "Ít nhất 4 đoàn viên", "Ít nhất 5 đoàn viên", "Ít nhất 6 đoàn viên"], c: 0 },
+        { q: "Điều kiện thành lập Đoàn cơ sở là gì?", a: ["Có ít nhất 30 đoàn viên và 3 chi đoàn", "50 đoàn viên", "30 đoàn viên và 2 chi đoàn", "50 đoàn viên và 3 chi đoàn"], c: 0 },
+        { q: "Đoàn viên được phân loại theo mấy mức?", a: ["4 mức (Xuất sắc, khá, trung bình, yếu)", "3 mức", "5 mức", "2 mức"], c: 0 },
+        { q: "Quy trình phát triển Đoàn viên có mấy bước?", a: ["4 bước", "2 bước", "6 bước", "5 bước"], c: 0 },
+        { q: "Xóa tên đoàn viên khi không đóng phí hoặc sinh hoạt mấy tháng?", a: ["3 tháng trong một năm (không lý do)", "1 tháng", "6 tháng", "2 tháng"], c: 0 },
+        { q: "Phong trào đoàn kết 3 lực lượng thanh niên gồm Đoàn và ai?", a: ["Công an, Quân đội", "Cựu chiến binh", "Hội Phụ nữ", "Hội Nông dân"], c: 0 },
+        { q: "Tháng thanh niên phát động lần đầu năm nào?", a: ["2003", "2000", "2004", "2005"], c: 0 },
+        { q: "Chương trình rèn luyện đoàn viên mới có bao nhiêu tiêu chí?", a: ["5 rèn luyện, 10 hành động", "4 rèn luyện", "3 rèn luyện", "2 rèn luyện"], c: 0 },
+        { q: "Đảng Cộng sản Việt Nam thành lập ngày nào?", a: ["3/2/1930", "3/2/1931", "2/3/1930", "2/3/1931"], c: 0 },
+        { q: "Hội nghị hợp nhất các tổ chức cộng sản ở đâu?", a: ["Hồng Kông", "Hưng Yên", "Nam Đàn", "Nhật Bản"], c: 0 },
+        { q: "Ai là Tổng Bí thư đầu tiên của Đảng?", a: ["Trần Phú", "Lê Hồng Phong", "Trường Chinh", "Lê Duẩn"], c: 0 },
+        { q: "Nhân tố tất yếu đầu tiên thắng lợi cách mạng VN là?", a: ["Sự lãnh đạo của Đảng Cộng sản VN", "Kinh tế", "Thế giới", "Dân chủ"], c: 0 },
+        { q: "Câu nói: 'Thà hy sinh tất cả chứ nhất định không chịu mất nước...' là của ai?", a: ["Hồ Chí Minh", "Trường Chinh", "Lê Duẩn", "Võ Nguyên Giáp"], c: 0 },
+        { q: "Tính chất nền văn hóa VN theo Hồ Chí Minh là?", a: ["Dân tộc, khoa học và đại chúng", "Mặt trận", "Tinh hoa nhân loại", "Nâng cao dân trí"], c: 0 },
+        { q: "Vị tướng nào được Bác Hồ đặt tên?", a: ["Đại tướng Nguyễn Chí Thanh", "Văn Tiến Dũng", "Hoàng Văn Thái", "Chu Huy Mân"], c: 0 },
+        { q: "Theo Hồ Chí Minh, việc học phải như thế nào?", a: ["Cả học mọi lúc, mọi nơi, tự học và đào tạo lại", "Chỉ học ở trường", "Học khi còn trẻ", "Học lý thuyết"], c: 0 }
+    ];
+
+    let current = 0;
+    let questions = [];
+    let corrects = 0;
+    let wrongs = [];
+    let isFailed = false;
+
+    function start() {
+        // Đảo nội dung câu hỏi nhưng vẫn giữ danh sách 33 câu 
+        questions = [...db].sort(() => Math.random() - 0.5).map(item => {
+            const correctText = item.a[item.c];
+            const options = [...item.a].sort(() => Math.random() - 0.5);
+            return { ...item, a: options, c: options.indexOf(correctText) };
+        });
+        show();
+    }
+
+    function show() {
+        isFailed = false;
+        const q = questions[current];
+        document.getElementById('current-number').innerText = `Câu ${current + 1}/${questions.length}`;
+        document.getElementById('percent-text').innerText = Math.round((current / questions.length) * 100) + "%";
+        document.getElementById('bar-fill').style.width = (current / questions.length * 100) + "%";
+        document.getElementById('q-text').innerText = q.q;
+        document.getElementById('next-btn').style.display = 'none';
+
+        const box = document.getElementById('options-box');
+        box.innerHTML = '';
+        q.a.forEach((txt, i) => {
+            const div = document.createElement('div');
+            div.className = 'option';
+            div.innerText = txt;
+            div.onclick = () => check(i, div);
+            box.appendChild(div);
+        });
+    }
+
+    function check(idx, el) {
+        const q = questions[current];
+        const all = document.querySelectorAll('.option');
+        if (idx === q.c) {
+            el.classList.add('correct');
+            if (!isFailed) corrects++;
+            all.forEach(o => o.style.pointerEvents = 'none');
+            document.getElementById('next-btn').style.display = 'block';
+        } else {
+            if (!isFailed) { wrongs.push(q); isFailed = true; }
+            el.classList.add('wrong');
+            setTimeout(() => el.classList.remove('wrong'), 500);
+        }
+    }
+
+    function handleNext() {
+        current++;
+        if (current < questions.length) show();
+        else finish();
+    }
+
+    function finish() {
+        document.getElementById('quiz-ui').style.display = 'none';
+        document.getElementById('result-ui').style.display = 'block';
+        document.getElementById('res-correct').innerText = corrects;
+        document.getElementById('res-wrong').innerText = wrongs.length;
+        
+        const rBox = document.getElementById('review-box');
+        if (wrongs.length > 0) {
+            rBox.innerHTML = '<h4>Các câu cần lưu ý:</h4>';
+            wrongs.forEach(w => {
+                const d = document.createElement('div');
+                d.className = 'wrong-item';
+                d.innerHTML = `<b>${w.q}</b><br><span style="color:var(--success)">✔ ${w.a[w.c]}</span><br><small style="color:var(--secondary)">💡 ${w.tip || 'Ôn kỹ phần này Duy nhé!'}</small>`;
+                rBox.appendChild(d);
+            });
+        }
+        confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    }
+
+    start();
+</script>
+</body>
+</html>
